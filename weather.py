@@ -1,8 +1,13 @@
 import requests
 import json
 import sys
+import os
 from datetime import datetime
 from zoneinfo import ZoneInfo
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # API URLs
 WEATHERAPI_URL = "http://api.weatherapi.com/v1/forecast.json"
@@ -441,11 +446,11 @@ def fetch_openmeteo_data(lat, lon, start_hour=None):
         print(f"Open-Meteo Forecast Error: {e}")
 
 if __name__ == "__main__":
-    # API keys
-    api_key = "c22f2d3b66544e79a8e42417251809"  # WeatherAPI key
-    tomorrow_api_key = "2ipNJNeKqiKI2OC3CdXAgPKV38X8uFUE"  # Tomorrow.io key
-    lat = 1.2915
-    lon = 103.8585
+    # Load API keys and configuration from environment variables
+    api_key = os.getenv('WEATHERAPI_KEY')
+    tomorrow_api_key = os.getenv('TOMORROW_API_KEY')
+    lat = float(os.getenv('LAT'))
+    lon = float(os.getenv('LON'))
     
     # Change this value to set the starting hour (0-23)
     # Set to None to use current hour
