@@ -9,14 +9,22 @@ from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv()
 
+# =============================================================================
+# CONFIGURATION
+# =============================================================================
+
 # API URLs
 WEATHERAPI_URL = "http://api.weatherapi.com/v1/forecast.json"
 SG_API_URL = "https://api-open.data.gov.sg/v2/real-time/api/two-hr-forecast"
 TOMORROW_URL = "https://api.tomorrow.io/v4/timelines"
-OPENMETEO_URL = "https://api.open-meteo.com/v1/forecast"
+VISUAL_CROSSING_URL = "https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline"
 
-def fetch_weatherapi_data(api_key, lat, lon, start_hour=None):
-    """Fetch 4-hour forecast data from WeatherAPI starting from specified hour."""
+# =============================================================================
+# WEATHER API FUNCTIONS
+# =============================================================================
+
+def fetch_weatherapi_data(api_key, lat, lon):
+    """Fetch 4-hour forecast data from WeatherAPI starting from current hour."""
     try:
         params = {
             "key": api_key,
@@ -38,41 +46,19 @@ def fetch_weatherapi_data(api_key, lat, lon, start_hour=None):
             for day in forecast:
                 hourly.extend(day.get('hour', []))
             
-            # Determine starting hour
-            if start_hour is not None:
-                try:
-                    start_hour = int(start_hour)
-                    if not (0 <= start_hour <= 23):
-                        print("Hour must be between 0 and 23")
-                        return
-                    location = data.get('location', {})
-                    tz_id = location.get('tz_id', 'UTC')
-                    try:
-                        tz = ZoneInfo(tz_id)
-                    except:
-                        tz = ZoneInfo("UTC")
-                    target_dt = datetime.now(tz).replace(hour=start_hour, minute=0, second=0, microsecond=0)
-                    formatted_time = target_dt.strftime("%d/%m/%Y %H:%M %z")
-                    if len(formatted_time) >= 5:
-                        formatted_time = f"{formatted_time[:-5]}{formatted_time[-5:-2]}:{formatted_time[-2:]}"
-                    print(f"=== WeatherAPI 4-Hour Forecast ({formatted_time}) ===")
-                except ValueError:
-                    print("Invalid hour format. Use 0-23 (e.g., 15)")
-                    return
-            else:
-                # Default to current hour
-                location = data.get('location', {})
-                tz_id = location.get('tz_id', 'UTC')
-                try:
-                    tz = ZoneInfo(tz_id)
-                except:
-                    tz = ZoneInfo("UTC")
-                start_hour = datetime.now(tz).hour
-                current_dt = datetime.now(tz)
-                formatted_time = current_dt.strftime("%d/%m/%Y %H:%M %z")
-                if len(formatted_time) >= 5:
-                    formatted_time = f"{formatted_time[:-5]}{formatted_time[-5:-2]}:{formatted_time[-2:]}"
-                print(f"=== WeatherAPI 4-Hour Forecast (starting from {formatted_time}) ===")
+            # Use current hour
+            location = data.get('location', {})
+            tz_id = location.get('tz_id', 'UTC')
+            try:
+                tz = ZoneInfo(tz_id)
+            except:
+                tz = ZoneInfo("UTC")
+            start_hour = datetime.now(tz).hour
+            current_dt = datetime.now(tz)
+            formatted_time = current_dt.strftime("%d/%m/%Y %H:%M %z")
+            if len(formatted_time) >= 5:
+                formatted_time = f"{formatted_time[:-5]}{formatted_time[-5:-2]}:{formatted_time[-2:]}"
+            print(f"=== WeatherAPI 4-Hour Forecast (starting from {formatted_time}) ===")
             
             # Show 4 hours starting from start_hour (allow next day)
             count = 0
@@ -87,8 +73,10 @@ def fetch_weatherapi_data(api_key, lat, lon, start_hour=None):
                 if time_str:
                     # Parse the full datetime string properly
                     try:
-                        # WeatherAPI returns format: "2025-09-18 00:00"
-                        dt = datetime.fromisoformat(time_str)
+                        # WeatherAPI returns format: "2025-09-18 00:00" in Singapore time
+                        # We need to treat it as Singapore timezone
+                        sgt = ZoneInfo('Asia/Singapore')
+                        dt = datetime.fromisoformat(time_str).replace(tzinfo=sgt)
                         current_hour = dt.hour
                         
                         # Find the first hour that matches our start hour
@@ -238,7 +226,7 @@ def get_weather_description(code):
     }
     return weather_codes.get(code, f"Unknown ({code})")
 
-def fetch_tomorrow_forecast_data(api_key, lat, lon, start_hour=None):
+def fetch_tomorrow_forecast_data(api_key, lat, lon):
     """Fetch and parse Tomorrow.io forecast data."""
     try:
         params = {
@@ -261,32 +249,14 @@ def fetch_tomorrow_forecast_data(api_key, lat, lon, start_hour=None):
         timeline = timelines[0]
         intervals = timeline.get('intervals', [])
         
-        # Determine starting hour
-        if start_hour is not None:
-            try:
-                start_hour = int(start_hour)
-                if not (0 <= start_hour <= 23):
-                    print("Hour must be between 0 and 23")
-                    return
-                # Create timezone-aware datetime for header
-                sgt = ZoneInfo('Asia/Singapore')
-                target_dt = datetime.now(sgt).replace(hour=start_hour, minute=0, second=0, microsecond=0)
-                formatted_time = target_dt.strftime("%d/%m/%Y %H:%M %z")
-                if len(formatted_time) >= 5:
-                    formatted_time = f"{formatted_time[:-5]}{formatted_time[-5:-2]}:{formatted_time[-2:]}"
-                print(f"\n=== Tomorrow.io 4-Hour Forecast ({formatted_time}) ===")
-            except ValueError:
-                print("Invalid hour format. Use 0-23 (e.g., 15)")
-                return
-        else:
-            # Default to current hour
-            sgt = ZoneInfo('Asia/Singapore')
-            current_dt = datetime.now(sgt)
-            start_hour = current_dt.hour
-            formatted_time = current_dt.strftime("%d/%m/%Y %H:%M %z")
-            if len(formatted_time) >= 5:
-                formatted_time = f"{formatted_time[:-5]}{formatted_time[-5:-2]}:{formatted_time[-2:]}"
-            print(f"\n=== Tomorrow.io 4-Hour Forecast (starting from {formatted_time}) ===")
+        # Use current hour
+        sgt = ZoneInfo('Asia/Singapore')
+        current_dt = datetime.now(sgt)
+        start_hour = current_dt.hour
+        formatted_time = current_dt.strftime("%d/%m/%Y %H:%M %z")
+        if len(formatted_time) >= 5:
+            formatted_time = f"{formatted_time[:-5]}{formatted_time[-5:-2]}:{formatted_time[-2:]}"
+        print(f"\n=== Tomorrow.io 4-Hour Forecast (starting from {formatted_time}) ===")
         
         # Show next 4 hours (filter duplicates)
         count = 0
@@ -361,103 +331,117 @@ def get_openmeteo_weather_description(code):
     }
     return weather_codes.get(code, f"Unknown ({code})")
 
-def fetch_openmeteo_data(lat, lon, start_hour=None):
-    """Fetch 4-hour forecast data from Open-Meteo starting from specified hour."""
+def fetch_visual_crossing_data(lat, lon):
+    """Fetch 4-hour forecast data from Visual Crossing starting from current hour."""
     try:
+        # Get API key
+        api_key = os.getenv('VISUAL_CROSSING_API_KEY')
+        if not api_key:
+            print("Visual Crossing API key not found in environment variables")
+            return
+        
+        # Create location string for Visual Crossing API
+        location = f"{lat},{lon}"
+        
+        # Get current date and next day for the API call
+        sgt = ZoneInfo('Asia/Singapore')
+        today = datetime.now(sgt).date()
+        tomorrow = today.replace(day=today.day + 1) if today.day < 28 else today.replace(month=today.month + 1, day=1)
+        
+        # Build the URL with location and date range
+        url = f"{VISUAL_CROSSING_URL}/{location}/{today}/{tomorrow}"
+        
         params = {
-            "latitude": lat,
-            "longitude": lon,
-            "hourly": "weather_code",
-            "timezone": "Asia/Singapore",
-            "forecast_days": 2
+            "unitGroup": "metric",
+            "include": "hours",
+            "key": api_key
         }
         
-        response = requests.get(OPENMETEO_URL, params=params, timeout=20)
+        response = requests.get(url, params=params, timeout=20)
         response.raise_for_status()
         data = response.json()
-        
+
         # Extract hourly data
-        hourly = data.get('hourly', {})
-        times = hourly.get('time', [])
-        weather_codes = hourly.get('weather_code', [])
-        
-        if not times or not weather_codes:
+        days = data.get('days', [])
+        if not days:
             print("No forecast data found")
             return
         
-        # Determine starting hour
-        if start_hour is not None:
-            try:
-                start_hour = int(start_hour)
-                if not (0 <= start_hour <= 23):
-                    print("Hour must be between 0 and 23")
-                    return
-                # Create timezone-aware datetime for header
-                sgt = ZoneInfo('Asia/Singapore')
-                target_dt = datetime.now(sgt).replace(hour=start_hour, minute=0, second=0, microsecond=0)
-                formatted_time = target_dt.strftime("%d/%m/%Y %H:%M %z")
-                if len(formatted_time) >= 5:
-                    formatted_time = f"{formatted_time[:-5]}{formatted_time[-5:-2]}:{formatted_time[-2:]}"
-                print(f"\n=== Open-Meteo 4-Hour Forecast ({formatted_time}) ===")
-            except ValueError:
-                print("Invalid hour format. Use 0-23 (e.g., 15)")
-                return
-        else:
-            # Default to current hour
-            sgt = ZoneInfo('Asia/Singapore')
-            current_dt = datetime.now(sgt)
-            start_hour = current_dt.hour
-            formatted_time = current_dt.strftime("%d/%m/%Y %H:%M %z")
-            if len(formatted_time) >= 5:
-                formatted_time = f"{formatted_time[:-5]}{formatted_time[-5:-2]}:{formatted_time[-2:]}"
-            print(f"\n=== Open-Meteo 4-Hour Forecast (starting from {formatted_time}) ===")
+        # Flatten all hours from all days and add date information
+        all_hours = []
+        for day in days:
+            day_date = day.get('datetime', '')
+            hours = day.get('hours', [])
+            for hour in hours:
+                # Add the date to each hour entry
+                hour['date'] = day_date
+                all_hours.append(hour)
         
-        # Show next 4 hours (allow next day)
+        if not all_hours:
+            print("No hourly forecast data found")
+            return
+        
+        # Use current hour
+        current_dt = datetime.now(sgt)
+        start_hour = current_dt.hour
+        formatted_time = current_dt.strftime("%d/%m/%Y %H:%M %z")
+        if len(formatted_time) >= 5:
+            formatted_time = f"{formatted_time[:-5]}{formatted_time[-5:-2]}:{formatted_time[-2:]}"
+        print(f"\n=== Visual Crossing 4-Hour Forecast (starting from {formatted_time}) ===")
+        
+        # Show next 4 hours
         count = 0
-        start_time = None
+        start_found = False
         
-        for i, time_str in enumerate(times):
+        for hour_data in all_hours:
             if count >= 4:
                 break
                 
             # Parse time
-            dt = datetime.fromisoformat(time_str)
+            time_str = hour_data.get('datetime', '')  # This is "HH:MM:SS"
+            date_str = hour_data.get('date', '')      # This is "YYYY-MM-DD"
+            
+            if not time_str or not date_str:
+                continue
+                
+            # Combine date and time to create full datetime
+            datetime_str = f"{date_str}T{time_str}"
+            # Visual Crossing returns time in UTC, but we need Singapore time
+            dt_utc = datetime.fromisoformat(datetime_str).replace(tzinfo=ZoneInfo('UTC'))
+            # Convert to Singapore time
+            sgt = ZoneInfo('Asia/Singapore')
+            dt = dt_utc.astimezone(sgt)
             forecast_hour = dt.hour
             
             # Find the first forecast that matches our start hour
-            if start_time is None and forecast_hour >= start_hour:
-                start_time = dt
+            if not start_found and forecast_hour >= start_hour:
+                start_found = True
                 time_display = dt.strftime("%H:%M")
-                weather_code = weather_codes[i]
-                weather_desc = get_openmeteo_weather_description(weather_code)
+                condition = hour_data.get('conditions', 'Unknown')
                 
-                print(f"{time_display}: {weather_desc}")
+                print(f"{time_display}: {condition}")
                 count += 1
-            # Continue with subsequent hours (including next day)
-            elif start_time is not None:
+            # Continue with subsequent hours
+            elif start_found:
                 time_display = dt.strftime("%H:%M")
-                weather_code = weather_codes[i]
-                weather_desc = get_openmeteo_weather_description(weather_code)
+                condition = hour_data.get('conditions', 'Unknown')
                 
-                print(f"{time_display}: {weather_desc}")
+                print(f"{time_display}: {condition}")
                 count += 1
         
     except Exception as e:
-        print(f"Open-Meteo Forecast Error: {e}")
+        print(f"Visual Crossing Forecast Error: {e}")
 
 if __name__ == "__main__":
     # Load API keys and configuration from environment variables
     api_key = os.getenv('WEATHERAPI_KEY')
     tomorrow_api_key = os.getenv('TOMORROW_API_KEY')
+    visual_crossing_key = os.getenv('VISUAL_CROSSING_API_KEY')
     lat = float(os.getenv('LAT'))
     lon = float(os.getenv('LON'))
     
-    # Change this value to set the starting hour (0-23)
-    # Set to None to use current hour
-    start_hour = 23  # Example: start from 6 PM
-    
-    # Fetch data from all four APIs
-    fetch_weatherapi_data(api_key, lat, lon, start_hour)
+    # Fetch data from all four APIs (all use current hour automatically)
+    fetch_weatherapi_data(api_key, lat, lon)
     fetch_sg_api_data(lat, lon)
-    fetch_tomorrow_forecast_data(tomorrow_api_key, lat, lon, start_hour)
-    fetch_openmeteo_data(lat, lon, start_hour)
+    fetch_tomorrow_forecast_data(tomorrow_api_key, lat, lon)
+    fetch_visual_crossing_data(lat, lon)
